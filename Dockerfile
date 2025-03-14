@@ -7,6 +7,7 @@ ENV PATH="/opt/dcm2niix-v1.0.20240202/bin:$PATH"
 # Install dependencies and dcm2niix
 RUN apt-get update -qq \
     && apt-get install -y -q --no-install-recommends \
+           bc \
            cmake \
            curl \
            g++ \
@@ -40,14 +41,23 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 # Update PATH to include conda
 ENV PATH="/opt/conda/bin:$PATH"
 
+# Install pydicom using Conda
+RUN /opt/conda/bin/conda install -y -c conda-forge pydicom && \
+    /opt/conda/bin/conda clean -afy
+
 # Install jq v1.6
-RUN apt-get update && apt-get install -y jq
+RUN apt-get update && apt-get install -y curl && \
+    curl -L -o /usr/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && \
+    chmod +x /usr/bin/jq && \
+    jq --version
 
-# Install deno v2.0.6
+# Install deno v2.2.3
+ENV DENO_DIR=/opt/deno_cache
+ENV DENO_INSTALL="/opt/.deno"
 RUN curl -fsSL https://deno.land/install.sh | sh
-ENV PATH="/root/.deno/bin:$PATH"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
 
-# Compile bids-validator v2.0.0
+# Compile bids-validator v2.0.3
 RUN deno compile -ERN -o bids-validator jsr:@bids/validator
 
 # Set the working directory
@@ -59,4 +69,4 @@ COPY . /app
 ENV PATH="/app/functions:$PATH"
 
 # Run the application
-ENTRYPOINT ["dcm2bids.py"]
+ENTRYPOINT ["/app/functions/dcm2bids.py"]
