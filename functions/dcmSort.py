@@ -1,128 +1,70 @@
 #!/usr/bin/env python3
-"""
-This script converts DICOM files to BIDS format using the PNI 7T workflow.
 
-Modules:
-    os: Provides a way of using operating system dependent functionality.
-    subprocess: Allows you to spawn new processes, connect to their input/output/error pipes, and obtain their return codes.
-    tempfile: Generates temporary files and directories.
-    bids_validator: Validates BIDS datasets.
-    argparse: Parses command-line arguments.
-
-Functions:
-    run_command(command):
-        Executes a shell command and raises an error if the command fails.
-        Args:
-            command (str): The command to be executed.
-        Raises:
-            subprocess.CalledProcessError: If the command execution fails.
-
-    main():
-        Main function that sets up the workflow for converting DICOMs to BIDS format.
-        It creates a temporary directory, runs the necessary scripts, and validates the BIDS output.
-
-Arguments:
-    --dicoms_dir (str): Directory containing DICOM files.
-    --bids_dir (str): Output BIDS directory.
-    --sub (str): Subject ID, NO sub- string.
-    --ses (str): Session ID, NO ses- string.
-"""
 import os
-import subprocess
-import argparse
-import time
+import sys
+from collections import defaultdict
+import pydicom
 
-# Arguments
-parser = argparse.ArgumentParser(description='Convert DICOMs to BIDS format.')
-parser.add_argument('--sub', required=True, help='Subject ID')
-parser.add_argument('--ses', required=True, help='Session ID')
-parser.add_argument('--dicoms_dir', required=False, help='Directory containing DICOM files')
-parser.add_argument('--sorted_dir', required=True, help='Directory containing SORTED DICOM files')
-parser.add_argument('--bids_dir', required=True, help='Output BIDS directory')
-parser.add_argument('--force', action='store_true', help='Optional argument to overwrite the subject bids directory')
+def print_help():
+    print("""
+COMMAND:
+   dcmSort.py
 
-args = parser.parse_args()
-dicoms_dir = os.path.abspath(args.dicoms_dir) if args.dicoms_dir else None
-bids_dir = os.path.abspath(args.bids_dir)
-sorted_dir = os.path.abspath(args.sorted_dir)
-sub = args.sub
-ses = args.ses
-force = args.force
+ARGUMENTS:
+   <pos1>        : Input directory with unsorted DICOMS
+   <pos2>        : Output directory
 
-# Remove strings if they exist in sub and ses
-sub = sub.replace('sub-', '')
-ses = ses.replace('ses-', '')
+USAGE:
+    dcmSort.py <input_directory> <outputDirectory>
+""")
 
-print('-------------------------------------------------------')
-print('         PNI 7T - DICOM to BIDS workflow')
-print('-------------------------------------------------------')
-print(f'Subjet:             {sub}')
-print(f'Session:            {ses}')
-if dicoms_dir is not None:
-    print(f'dicoms directory:   {dicoms_dir}')
-print(f'sorted directory:   {sorted_dir}')
-print(f'bids directory:     {bids_dir}')
-if force:
-    print(f'Overwrite subject:   {force}')
-    force_flag=' -force'
-else:
-    force_flag=''
-# Function to run a command
-def run_command(command):
-    try:
-        print(f"Running command: {command}")
-        subprocess.run(command.split(), check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error occurred while running command: Exception: {e}")
+if len(sys.argv) < 3:
+    print("\n[ERROR]... A mandatory argument is missing:")
+    print("      inputDirectory    : {}".format(sys.argv[1] if len(sys.argv) > 1 else ""))
+    print("      outputDirectory   : {}".format(sys.argv[2] if len(sys.argv) > 2 else ""))
+    print_help()
+    sys.exit(1)
 
-# Workflow steps
-def sorted2bids():
-    print("\n[ info ] ... Running Sorted dicoms to BIDS ...\n")
-    run_command(f'7t2bids -in {sorted_dir} -id {sub} -ses {ses} -bids {bids_dir}{force_flag}')
+input_directory = sys.argv[1]
+output_directory = sys.argv[2]
 
-def validate_bids():
-    print("\n[ info ] ... Running BIDS validator ...\n")
-    command = f'deno run --allow-write -ERN jsr:@bids/validator {bids_dir} --ignoreWarnings --config {bids_dir}/bids_validator_config.json --outfile {bids_dir}/bids_validator_output.txt'
-    run_command(command)
+print("[ info ] ... Getting DICOM information...")
 
-def main():
-    # Set a timer
-    start_time = time.time()
+dicoms = [os.path.join(input_directory, f) for f in os.listdir(input_directory) if os.path.isfile(os.path.join(input_directory, f))]
+dicom_info = []
 
-    # Check if sorted_dir exists, and create it if it doesn't
-    if not os.path.exists(sorted_dir):
-        print("\n[info] ... Creating sorted dicoms directory\n")
-        os.makedirs(sorted_dir)
+for dicom in dicoms:
+    ds = pydicom.dcmread(dicom)
+    series_date = ds.SeriesDate
+    series_time = ds.SeriesTime.split('.')[0]  # Remove any fractional seconds
+    series_number = "{:02d}".format(int(ds.SeriesNumber))
+    series_description = ds.SeriesDescription
+    dicom_info.append((series_date, series_time, series_number, series_description, dicom))
 
-    if dicoms_dir is None:
-        # Case 1: NO dicoms_dir & sorted_dir is empty (ERROR)
-        # If sorted_dir is empty, exit and error
-        if not os.listdir(sorted_dir):
-            print("\n[error] ... Sorted directory is empty\n")
-            print(sorted_dir)
-            return
-        # Case 2: NO dicoms_dir & sorted_dir with dicoms directories
-        sorted2bids()
-    else:
-        # Case 3: dicoms_dir provided (run the full pipeline)
-        # Run sorting and then sorted2bids
-        print("\n[step 1] ... Running sorting of dicoms ...\n")
-        run_command(f'dcmSort.py {dicoms_dir} {sorted_dir}')
+# Add session numbers
+dicom_info.sort()
+session_data = defaultdict(int)
+prev_id = 0
+session = 1
 
-        print("\n[step 2] ... Running sorted2bids ...\n")
-        sorted2bids()
+for i, (series_date, series_time, series_number, series_description, dicom) in enumerate(dicom_info):
+    id2 = int(series_number.lstrip('0'))
+    if id2 < prev_id:
+        session += 1
+    prev_id = id2
+    session_data[(series_date, series_time, series_number, series_description)] = session
 
-    # Run validate_bids
-    validate_bids()
+# Copy to correct directory
+print("[ info ] ... Sorting DICOMS...")
+for series_date, series_time, series_number, series_description, dicom in dicom_info:
+    # Retrieve data from dicom info
+    session = session_data[(series_date, series_time, series_number, series_description)]
 
-    # Print validate_bids output
-    with open(os.path.join(bids_dir, 'bids_validator_output.txt'), 'r') as file:
-        print(file.read())
-        
-    elapsed_time = time.time() - start_time
-    minutes, seconds = divmod(elapsed_time, 60)
-    print(f"Workflow completed successfully in {minutes:.0f} minutes and {seconds:.0f} seconds.")
-    print('-------------------------------------------------------')
+    # Create directory name
+    directory = f'S{session}_{series_number}_{series_description}'
 
-if __name__ == "__main__":
-    main()
+    # Output directory
+    output_path = os.path.join(output_directory, directory)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    os.system(f'cp {dicom} {output_path}')

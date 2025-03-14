@@ -35,11 +35,12 @@ import time
 
 # Arguments
 parser = argparse.ArgumentParser(description='Convert DICOMs to BIDS format.')
-parser.add_argument('--dicoms_dir', required=True, help='Directory containing DICOM files')
-parser.add_argument('--bids_dir', required=True, help='Output BIDS directory')
-parser.add_argument('--sorted_dir', required=False, help='Directory containing SORTED DICOM files')
 parser.add_argument('--sub', required=True, help='Subject ID')
 parser.add_argument('--ses', required=True, help='Session ID')
+parser.add_argument('--dicoms_dir', required=True, help='Directory containing DICOM files')
+parser.add_argument('--sorted_dir', required=False, help='Directory containing SORTED DICOM files')
+parser.add_argument('--bids_dir', required=True, help='Output BIDS directory')
+parser.add_argument('--force', action='store_true', help='Optional argument to overwrite the subject bids directory')
 
 args = parser.parse_args()
 dicoms_dir = os.path.abspath(args.dicoms_dir)
@@ -47,6 +48,7 @@ bids_dir = os.path.abspath(args.bids_dir)
 sorted_dir = os.path.abspath(args.sorted_dir) if args.sorted_dir else None
 sub = args.sub
 ses = args.ses
+force = args.force
 
 # Remove strings if they exist in sub and ses
 sub = sub.replace('sub-', '')
@@ -57,6 +59,11 @@ print(f'Subjet:  {sub}')
 print(f'Session: {ses}')
 print(f'dicoms directory:    {dicoms_dir}')
 print(f'bids directory:      {bids_dir}')
+if force:
+    print(f'Overwrite subject:   {force}')
+    force_flag=' -force'
+else:
+    force_flag=''
 
 # Function to run a command
 def run_command(command):
@@ -72,7 +79,7 @@ def run_command(command):
 # Workflow steps
 def sorted2bids(tmpdirname):
     print("\n[step 2] ... Running Sorted dicoms to BIDS ...\n")
-    run_command(f'mpn_sorted2bids.sh -in {tmpdirname} -id {sub} -ses {ses} -bids {bids_dir}')
+    run_command(f'mpn_sorted2bids.sh -in {tmpdirname} -id {sub} -ses {ses} -bids {bids_dir}{force_flag}')
 
 def validate_bids():
     print("Running BIDS validator ...")
