@@ -155,7 +155,7 @@ here=$(pwd)
 # https://bids-specification.readthedocs.io/en/stable/04-modality-specific-files/01-magnetic-resonance-imaging-data.html
 orig=(
     "*anat-T1w_acq_mprage_0.8mm_CSptx"
-    "*fmap-b1_*_p2"
+    "*fmap-b1_*_p2*"
     "*fmap-fmri_acq-mbep2d_SE_19mm_dir-AP"
     "*fmap-fmri_acq-mbep2d_SE_19mm_dir-PA"
     "*func-cloudy_acq-ep2d_MJC_19mm"
@@ -183,7 +183,7 @@ orig=(
     "*anat-mtw_acq-MTON_07mm"
     "*anat-mtw_acq-MTOFF_07mm"
     "*anat-mtw_acq-T1w_07mm"
-    "*anat-nm_acq-MTboost_sag_0.55mm"
+    "*anat-nm_acq-MTboost_sag_0*55mm"
     "*anat-angio_acq-tof_03mm_inplane"
     "*anat-angio_acq-tof_03mm_inplane_MIP_SAG"
     "*anat-angio_acq-tof_03mm_inplane_MIP_COR"
